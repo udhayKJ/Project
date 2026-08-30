@@ -3,3 +3,6 @@ uvicorn
 sqlalchemy 
 psycopg[binary] 
 python-dotenv
+pyjwt 
+pwdlib
+email-validator
