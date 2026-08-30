@@ -6,7 +6,7 @@ from . import models, schemas
 
 from .auth import hash_password, verify_password, create_access_token
 
-from .dependencies import get_current_user
+from .dependencies import get_current_user, require_role
 
 Base.metadata.create_all(bind=engine)
 
@@ -128,4 +128,98 @@ def get_me(
         "username": current_user.username,
         "role": current_user.role,
         "tenant_id": current_user.tenant_id
+    }
+
+@app.post(
+    "/resources",
+    response_model=schemas.ResourceResponse
+)
+def create_resource(
+    resource: schemas.ResourceCreate,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    new_resource = models.Resource(
+        name=resource.name,
+        owner_id=current_user.id,
+        tenant_id=current_user.tenant_id
+    )
+
+    db.add(new_resource)
+    db.commit()
+    db.refresh(new_resource)
+
+    return new_resource
+
+@app.get("/resources")
+def get_resources(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    resources = db.query(models.Resource).filter(
+        models.Resource.tenant_id == current_user.tenant_id
+    ).all()
+
+    return resources
+
+@app.get("/resources/{resource_id}")
+def get_resource(
+    resource_id: int,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    resource = db.query(models.Resource).filter(
+        models.Resource.id == resource_id
+    ).first()
+
+    if not resource:
+        raise HTTPException(
+            status_code=404,
+            detail="Resource not found"
+        )
+
+    if resource.tenant_id != current_user.tenant_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Access denied"
+        )
+
+    return resource
+
+@app.delete("/resources/{resource_id}")
+def delete_resource(
+    resource_id: int,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    resource = db.query(models.Resource).filter(
+        models.Resource.id == resource_id
+    ).first()
+
+    if not resource:
+        raise HTTPException(
+            status_code=404,
+            detail="Resource not found"
+        )
+
+    if resource.tenant_id != current_user.tenant_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Access denied"
+        )
+
+    if (
+        resource.owner_id != current_user.id
+        and current_user.role != "ADMIN"
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Only the owner or admin can delete this resource"
+        )
+
+    db.delete(resource)
+    db.commit()
+
+    return {
+        "message": "Resource deleted"
     }

@@ -39,3 +39,16 @@ class LoginRequest(BaseModel):
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str
+
+class ResourceCreate(BaseModel):
+    name: str
+
+
+class ResourceResponse(BaseModel):
+    id: int
+    name: str
+    owner_id: int
+    tenant_id: int
+
+    class Config:
+        from_attributes = True
