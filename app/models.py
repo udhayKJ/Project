@@ -39,3 +39,19 @@ class Resource(Base):
 
     owner = relationship("User")
     tenant = relationship("Tenant")
+
+class Order(Base):
+    __tablename__ = "orders"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    item_name = Column(String, nullable=False)
+    amount = Column(Integer, nullable=False)
+
+    status = Column(String, nullable=False, default="CREATED")
+
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False)
+
+    owner = relationship("User")
+    tenant = relationship("Tenant")

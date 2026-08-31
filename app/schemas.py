@@ -52,3 +52,22 @@ class ResourceResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+class OrderCreate(BaseModel):
+    item_name: str
+    amount: int
+
+
+class OrderResponse(BaseModel):
+    id: int
+    item_name: str
+    amount: int
+    status: str
+    owner_id: int
+    tenant_id: int
+
+    class Config:
+        from_attributes = True
+
+class OrderTransition(BaseModel):
+    new_status: str
