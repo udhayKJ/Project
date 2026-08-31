@@ -1,3 +1,4 @@
+from app import order_logic
 from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -6,7 +7,8 @@ from . import models, schemas
 
 from .auth import hash_password, verify_password, create_access_token
 from .dependencies import get_current_user, require_role
-from .order_logic import is_valid_transition
+from .order_logic import is_valid_transition, get_action, is_role_allowed
+from .event_logger import log_event
 
 Base.metadata.create_all(bind=engine)
 
@@ -243,6 +245,18 @@ def create_order(
         tenant_id=current_user.tenant_id
     )
 
+    log_event(
+    db=db,
+    user_id=current_user.id,
+    tenant_id=current_user.tenant_id,
+    action="CREATE",
+    resource_type="ORDER",
+    resource_id=new_order.id,
+    previous_state=None,
+    new_state="CREATED",
+    result="ALLOW"
+    )
+
     db.add(new_order)
     db.commit()
     db.refresh(new_order)
@@ -307,34 +321,102 @@ def transition_order(
             detail="Order not found"
         )
 
-    # Tenant isolation
     if order.tenant_id != current_user.tenant_id:
         raise HTTPException(
             status_code=403,
             detail="Access denied"
         )
 
-    # Ownership check
-    if order.owner_id != current_user.id:
-        raise HTTPException(
-            status_code=403,
-            detail="Only the order owner can perform this action"
-        )
-
-    # State machine check
     if not is_valid_transition(
         order.status,
         transition.new_status
     ):
+        log_event(
+        db=db,
+        user_id=current_user.id,
+        tenant_id=current_user.tenant_id,
+        action="INVALID_TRANSITION",
+        resource_type="ORDER",
+        resource_id=order.id,
+        previous_state=order.status,
+        new_state=transition.new_status,
+        result="DENY"
+        )
+
         raise HTTPException(
             status_code=400,
             detail=f"Invalid transition: "
                    f"{order.status} -> {transition.new_status}"
         )
 
+    action = get_action(
+        order.status,
+        transition.new_status
+    )
+
+    if action is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Unknown transition"
+        )
+
+    if not is_role_allowed(
+        current_user.role,
+        action
+    ):
+        log_event(
+        db=db,
+        user_id=current_user.id,
+        tenant_id=current_user.tenant_id,
+        action=action,
+        resource_type="ORDER",
+        resource_id=order.id,
+        previous_state=order.status,
+        new_state=transition.new_status,
+        result="DENY"
+        )
+
+        raise HTTPException(
+            status_code=403,
+            detail="Role not permitted for this action"
+        )
+
+    if (
+        current_user.role == "CUSTOMER"
+        and order.owner_id != current_user.id
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Customer can only modify own orders"
+        )
+
+    previous_state = order.status
     order.status = transition.new_status
 
     db.commit()
     db.refresh(order)
 
+    log_event(
+    db=db,
+    user_id=current_user.id,
+    tenant_id=current_user.tenant_id,
+    action=action,
+    resource_type="ORDER",
+    resource_id=order.id,
+    previous_state=previous_state,
+    new_state=order.status,
+    result="ALLOW"
+    )
+
     return order
+
+@app.get("/events")
+def get_events(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    events = db.query(models.APIEvent).filter(
+        models.APIEvent.tenant_id == current_user.tenant_id
+    ).all()
+
+    return events

@@ -55,3 +55,44 @@ class Order(Base):
 
     owner = relationship("User")
     tenant = relationship("Tenant")
+
+class APIEvent(Base):
+    __tablename__ = "api_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=True
+    )
+
+    tenant_id = Column(
+        Integer,
+        ForeignKey("tenants.id"),
+        nullable=True
+    )
+
+    action = Column(String, nullable=False)
+
+    resource_type = Column(String, nullable=False)
+
+    resource_id = Column(
+        Integer,
+        nullable=True
+    )
+
+    previous_state = Column(
+        String,
+        nullable=True
+    )
+
+    new_state = Column(
+        String,
+        nullable=True
+    )
+
+    result = Column(
+        String,
+        nullable=False
+    )
