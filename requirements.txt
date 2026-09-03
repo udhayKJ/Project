@@ -1,8 +1,10 @@
 fastapi
-uvicorn 
-sqlalchemy 
-psycopg[binary] 
+uvicorn
+sqlalchemy
+psycopg[binary]
 python-dotenv
-pyjwt 
+pyjwt
 pwdlib
 email-validator
+httpx
+pytest
